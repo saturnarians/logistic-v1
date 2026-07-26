@@ -1,0 +1,245 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PUBLIC
+  AGENT
+  DRIVER
+  MANAGER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ShipmentStatus {
+  PENDING
+  ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+  SOFT_DELETED
+}
+
+enum FlagStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum LocationSource {
+  GPS
+  MANUAL
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  INTERNAL
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum AgentStatus {
+  RUNNING
+  STOPPED
+}
+
+enum AgentActionStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  EXECUTED
+  FAILED
+}
+
+model User {
+  id                    String        @id @default(cuid())
+  email                 String        @unique
+  passwordHash          String?       // null if OAuth-only
+  role                  Role
+  name                  String
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  accounts              Account[]
+  sessions              Session[]
+  shipmentsCreated      Shipment[]    @relation("CreatedBy")
+  shipmentsAsDriver     Shipment[]    @relation("AssignedDriver")
+  shipmentsCancelled     Shipment[]    @relation("CancelledBy")
+  flagsRaised           Flag[]        @relation("FlagRaisedBy")
+  flagsResolved         Flag[]        @relation("FlagResolvedBy")
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+  agentActionsRequested AgentAction[] @relation("AgentActionActor")
+  agentActionsReviewed  AgentAction[] @relation("AgentActionReviewer")
+  agentControlChanges   AgentControl[]
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Country {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  isoCode String  @unique
+  states  State[]
+}
+
+model State {
+  id        String  @id @default(cuid())
+  name      String
+  countryId String
+  country   Country @relation(fields: [countryId], references: [id])
+  cities    City[]
+  @@unique([countryId, name])
+}
+
+model City {
+  id                   String     @id @default(cuid())
+  name                 String
+  stateId              String
+  state                State      @relation(fields: [stateId], references: [id])
+  shipmentsOrigin      Shipment[] @relation("OriginCity")
+  shipmentsDestination Shipment[] @relation("DestinationCity")
+  @@unique([stateId, name])
+  @@index([name])
+}
+
+model Shipment {
+  id                String         @id @default(cuid())
+  trackingCode      String         @unique @default(cuid())
+  status            ShipmentStatus @default(PENDING)
+  originCityId      String
+  originCity        City           @relation("OriginCity", fields: [originCityId], references: [id])
+  destinationCityId String
+  destinationCity   City           @relation("DestinationCity", fields: [destinationCityId], references: [id])
+  weightKg          Float
+  priceQuoted       Decimal        @db.Decimal(10, 2)
+  contactEmail      String?
+  contactPhone      String?
+  createdById       String
+  createdBy         User           @relation("CreatedBy", fields: [createdById], references: [id])
+  driverId          String?
+  driver            User?          @relation("AssignedDriver", fields: [driverId], references: [id])
+  cancelReason      String?
+  cancelledById     String?
+  cancelledBy       User?          @relation("CancelledBy", fields: [cancelledById], references: [id])
+  cancelledAt       DateTime?
+  currentLat        Float?
+  currentLng        Float?
+  lastLocationAt    DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  flags             Flag[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  @@index([status])
+  @@index([driverId])
+  @@index([createdById])
+  @@index([trackingCode])
+}
+
+model Flag {
+  id           String     @id @default(cuid())
+  shipmentId   String
+  shipment     Shipment   @relation(fields: [shipmentId], references: [id])
+  status       FlagStatus @default(PENDING)
+  reason       String?
+  raisedById   String
+  raisedBy     User       @relation("FlagRaisedBy", fields: [raisedById], references: [id])
+  resolvedById String?
+  resolvedBy   User?      @relation("FlagResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  @@index([shipmentId, status])
+}
+
+model AuditLog {
+  id         String          @id @default(cuid())
+  actorId    String
+  actor      User            @relation(fields: [actorId], references: [id])
+  shipmentId String?
+  shipment   Shipment?       @relation(fields: [shipmentId], references: [id])
+  action     String
+  source     LocationSource?
+  metadata   Json?
+  createdAt  DateTime        @default(now())
+  @@index([actorId])
+  @@index([shipmentId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id         String              @id @default(cuid())
+  userId     String?
+  user       User?               @relation(fields: [userId], references: [id])
+  shipmentId String?
+  shipment   Shipment?           @relation(fields: [shipmentId], references: [id])
+  channel    NotificationChannel
+  status     NotificationStatus  @default(PENDING)
+  event      String
+  title      String
+  body       String
+  sentAt     DateTime?
+  readAt     DateTime?
+  createdAt  DateTime            @default(now())
+  @@index([userId, status])
+  @@index([shipmentId])
+}
+
+model AgentControl {
+  id          String      @id @default("singleton")
+  status      AgentStatus @default(RUNNING)
+  reason      String?
+  updatedById String?
+  updatedBy   User?       @relation(fields: [updatedById], references: [id])
+  updatedAt   DateTime    @updatedAt
+}
+
+model AgentAction {
+  id             String            @id @default(cuid())
+  actorId        String?
+  actor          User?             @relation("AgentActionActor", fields: [actorId], references: [id])
+  toolName       String
+  input          Json
+  status         AgentActionStatus @default(PENDING_APPROVAL)
+  reviewedById   String?
+  reviewedBy     User?             @relation("AgentActionReviewer", fields: [reviewedById], references: [id])
+  reviewReason   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  @@index([status])
+  @@index([actorId])
+}

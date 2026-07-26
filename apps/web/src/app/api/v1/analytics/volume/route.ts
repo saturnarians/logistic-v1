@@ -1,0 +1,2 @@
+import { shipmentVolume } from '@logistics/core'; import { jsonError } from '../../../../../lib/api'; import { resolveActor } from '../../../../../server/auth/resolve-actor';
+export async function GET(request: Request) { try { const interval = new URL(request.url).searchParams.get('interval') === 'week' ? 'week' : 'day'; return Response.json(await shipmentVolume(await resolveActor(), interval)); } catch (error) { return jsonError(error); } }

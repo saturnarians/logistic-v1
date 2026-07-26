@@ -1,0 +1,24 @@
+{
+  "name": "@logistics/core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prisma:generate": "prisma generate",
+    "prisma:db-push": "prisma db push",
+    "prisma:seed": "bun prisma/seed.ts"
+  },
+  "dependencies": {
+    "@logistics/shared": "workspace:*",
+    "@prisma/client": "^5.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "prisma": "^5.14.0",
+    "typescript": "^5.4.5"
+  }
+}
