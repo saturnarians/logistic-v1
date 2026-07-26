@@ -46,3 +46,7 @@ out/
 # production
 build/
 dist/
+
+.codegraph/
+.vscode/
+.github/
